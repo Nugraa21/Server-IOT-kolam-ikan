@@ -1,0 +1,14 @@
+{
+  "name": "iot-backend",
+  "version": "1.0.0",
+  "description": "Backend untuk menerima data MQTT dan menyimpan ke Firebase",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^12.5.0",
+    "mqtt": "^5.10.1"
+  }
+}

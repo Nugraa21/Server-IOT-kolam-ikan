@@ -1,0 +1,3 @@
+node_modules/
+iot-service-account-key.json
+.env
