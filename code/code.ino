@@ -1,182 +1,194 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <HX711.h>
-#include <ArduinoJson.h>
+// Library yang diperlukan untuk fungsi WiFi, MQTT, sensor suhu, load cell, dan JSON
+#include <WiFi.h> // Library untuk koneksi WiFi
+#include <PubSubClient.h> // Library untuk komunikasi MQTT
+#include <OneWire.h> // Library untuk komunikasi dengan sensor DS18B20
+#include <DallasTemperature.h> // Library untuk membaca suhu dari sensor DS18B20
+#include <HX711.h> // Library untuk sensor berat (load cell) HX711
+#include <ArduinoJson.h> // Library untuk membuat dan mengelola data JSON
 
-// WiFi credentials
-const char* ssid = "YOUR_WIFI_SSID"; // Replace with your WiFi SSID
-const char* password = "YOUR_WIFI_PASSWORD"; // Replace with your WiFi password
+// Pengaturan kredensial WiFi
+const char* ssid = ""; // Ganti dengan nama SSID WiFi Anda
+const char* password = ""; // Ganti dengan kata sandi WiFi Anda
 
-// MQTT settings
-const char* mqtt_server = "broker.emqx.io";
-const int mqtt_port = 1883;
-const char* mqtt_client_id = "225510017";
-const char* mqtt_topic = "nugra/data/kolam";
+// Pengaturan MQTT
+const char* mqtt_server = "broker.emqx.io"; // Alamat server MQTT
+const int mqtt_port = 1883; // Port default untuk MQTT
+const char* mqtt_client_id = "225510017"; // ID unik untuk klien MQTT
+const char* mqtt_topic = "nugra/data/kolam"; // Topik MQTT untuk mengirim data
 
-// Sensor pins
-#define ONE_WIRE_BUS 4 // DS18B20 data pin
-#define DO_PIN 34      // Analog pin for DO sensor (simulated)
-#define PH_PIN 35      // Analog pin for pH sensor (simulated)
-#define HX711_DOUT 5   // HX711 data pin
-#define HX711_SCK 18   // HX711 clock pin
-#define TRIG_PIN 13    // Ultrasonic sensor trigger pin
-#define ECHO_PIN 12    // Ultrasonic sensor echo pin
+// Definisi pin untuk sensor
+#define ONE_WIRE_BUS 4 // Pin data untuk sensor suhu DS18B20
+#define DO_PIN 34 // Pin analog untuk sensor DO (dissolved oxygen, simulasi)
+#define PH_PIN 35 // Pin analog untuk sensor pH (simulasi)
+#define HX711_DOUT 5 // Pin data untuk sensor berat HX711
+#define HX711_SCK 18 // Pin clock untuk sensor berat HX711
+#define TRIG_PIN 13 // Pin trigger untuk sensor ultrasonik
+#define ECHO_PIN 12 // Pin echo untuk sensor ultrasonik
 
-// DS18B20 setup
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
+// Inisialisasi sensor DS18B20
+OneWire oneWire(ONE_WIRE_BUS); // Objek untuk komunikasi OneWire
+DallasTemperature sensors(&oneWire); // Objek untuk sensor suhu DS18B20
 
-// HX711 setup
-HX711 scale;
+// Inisialisasi sensor berat HX711
+HX711 scale; // Objek untuk sensor berat HX711
 
-// WiFi and MQTT clients
-WiFiClient espClient;
-PubSubClient client(espClient);
+// Inisialisasi klien WiFi dan MQTT
+WiFiClient espClient; // Objek untuk koneksi WiFi
+PubSubClient client(espClient); // Objek untuk komunikasi MQTT
 
-// Pond ID
-const int pond_id = 1; // Change this for different ponds (e.g., 1, 2, 3)
+// ID kolam
+const int pond_id = 1; // ID kolam, ubah sesuai kolam (misal: 1, 2, 3)
 
-// Calibration values
-const float DO_VOLTAGE_MIN = 0.0;  // Voltage at 0 mg/L
-const float DO_VOLTAGE_MAX = 3.3;  // Voltage at max DO
-const float PH_VOLTAGE_MIN = 0.0;  // Voltage at pH 0
-const float PH_VOLTAGE_MAX = 3.3;  // Voltage at pH 14
-const float TANK_HEIGHT = 100.0;   // Tank height in cm for water level
-const float SCALE_CALIBRATION = -7050.0; // Calibration factor for HX711
+// Nilai kalibrasi sensor
+const float DO_VOLTAGE_MIN = 0.0; // Tegangan minimum untuk sensor DO (0 mg/L)
+const float DO_VOLTAGE_MAX = 3.3; // Tegangan maksimum untuk sensor DO
+const float PH_VOLTAGE_MIN = 0.0; // Tegangan minimum untuk sensor pH (pH 0)
+const float PH_VOLTAGE_MAX = 3.3; // Tegangan maksimum untuk sensor pH (pH 14)
+const float TANK_HEIGHT = 100.0; // Tinggi tangki dalam cm untuk level air
+const float SCALE_CALIBRATION = -7050.0; // Faktor kalibrasi untuk sensor berat HX711
 
+// Fungsi setup: dijalankan sekali saat mikrokontroler dinyalakan
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); // Memulai komunikasi serial dengan baud rate 115200
   
-  // Initialize sensors
-  sensors.begin();
-  scale.begin(HX711_DOUT, HX711_SCK);
-  scale.set_scale(SCALE_CALIBRATION);
-  scale.tare(); // Reset scale to zero
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
+  // Inisialisasi sensor
+  sensors.begin(); // Memulai sensor suhu DS18B20
+  scale.begin(HX711_DOUT, HX711_SCK); // Memulai sensor berat HX711
+  scale.set_scale(SCALE_CALIBRATION); // Mengatur faktor kalibrasi untuk sensor berat
+  scale.tare(); // Mengatur ulang sensor berat ke nol
+  pinMode(TRIG_PIN, OUTPUT); // Mengatur pin trigger ultrasonik sebagai output
+  pinMode(ECHO_PIN, INPUT); // Mengatur pin echo ultrasonik sebagai input
   
-  // Connect to WiFi
-  setup_wifi();
+  // Menghubungkan ke WiFi
+  setup_wifi(); // Memanggil fungsi untuk koneksi WiFi
   
-  // Setup MQTT
-  client.setServer(mqtt_server, mqtt_port);
+  // Mengatur server MQTT
+  client.setServer(mqtt_server, mqtt_port); // Menghubungkan ke server MQTT
 }
 
+// Fungsi untuk menghubungkan ke jaringan WiFi
 void setup_wifi() {
-  delay(10);
-  Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  delay(10); // Penundaan singkat untuk stabilisasi
+  Serial.println("Menghubungkan ke WiFi...");
+  WiFi.begin(ssid, password); // Memulai koneksi WiFi dengan SSID dan password
+  while (WiFi.status() != WL_CONNECTED) { // Loop sampai terhubung
     delay(500);
-    Serial.print(".");
+    Serial.print("."); // Cetak tanda titik untuk menunjukkan proses koneksi
   }
-  Serial.println("\nWiFi connected");
+  Serial.println("\nWiFi terhubung");
 }
 
+// Fungsi untuk menghubungkan ulang ke server MQTT jika koneksi terputus
 void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    if (client.connect(mqtt_client_id)) {
-      Serial.println("connected");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
+  while (!client.connected()) { // Loop sampai terhubung ke MQTT
+    Serial.print("Mencoba koneksi MQTT...");
+    if (client.connect(mqtt_client_id)) { // Jika koneksi berhasil
+      Serial.println("terhubung");
+    } else { // Jika gagal
+      Serial.print("gagal, rc=");
+      Serial.print(client.state()); // Cetak kode status kegagalan
+      Serial.println(" coba lagi dalam 5 detik");
+      delay(5000); // Tunggu 5 detik sebelum mencoba lagi
     }
   }
 }
 
+// Fungsi untuk membaca suhu dari sensor DS18B20
 float readTemperature() {
-  sensors.requestTemperatures();
-  float temp = sensors.getTempCByIndex(0);
-  if (temp == DEVICE_DISCONNECTED_C) {
-    Serial.println("Error reading temperature");
-    return 0.0;
+  sensors.requestTemperatures(); // Meminta data suhu dari sensor
+  float temp = sensors.getTempCByIndex(0); // Membaca suhu dalam Celsius
+  if (temp == DEVICE_DISCONNECTED_C) { // Jika sensor tidak terdeteksi
+    Serial.println("Gagal membaca suhu");
+    return 0.0; // Kembalikan 0 jika gagal
   }
-  return temp;
+  return temp; // Kembalikan nilai suhu
 }
 
+// Fungsi untuk membaca kadar oksigen terlarut (DO, simulasi)
 float readDO() {
-  int analogValue = analogRead(DO_PIN);
-  float voltage = analogValue * (3.3 / 4095.0); // ESP32 ADC is 12-bit
-  // Map voltage to DO (0-8 mg/L, adjust based on sensor specs)
+  int analogValue = analogRead(DO_PIN); // Membaca nilai analog dari pin DO
+  float voltage = analogValue * (3.3 / 4095.0); // Konversi ke tegangan (ADC 12-bit)
+  // Mengonversi tegangan ke nilai DO (0-8 mg/L, sesuaikan dengan spesifikasi sensor)
   float doValue = mapFloat(voltage, DO_VOLTAGE_MIN, DO_VOLTAGE_MAX, 0.0, 8.0);
-  return constrain(doValue, 0.0, 8.0);
+  return constrain(doValue, 0.0, 8.0); // Batasi nilai antara 0 dan 8
 }
 
+// Fungsi untuk membaca pH (simulasi)
 float readPH() {
-  int analogValue = analogRead(PH_PIN);
-  float voltage = analogValue * (3.3 / 4095.0);
-  // Map voltage to pH (0-14, adjust based on sensor specs)
+  int analogValue = analogRead(PH_PIN); // Membaca nilai analog dari pin pH
+  float voltage = analogValue * (3.3 / 4095.0); // Konversi ke tegangan (ADC 12-bit)
+  // Mengonversi tegangan ke nilai pH (0-14, sesuaikan dengan spesifikasi sensor)
   float phValue = mapFloat(voltage, PH_VOLTAGE_MIN, PH_VOLTAGE_MAX, 0.0, 14.0);
-  return constrain(phValue, 0.0, 14.0);
+  return constrain(phValue, 0.0, 14.0); // Batasi nilai antara 0 dan 14
 }
 
+// Fungsi untuk membaca berat dari sensor HX711
 float readWeight() {
-  if (scale.is_ready()) {
-    float weight = scale.get_units(10); // Average of 10 readings
-    if (weight < 0) weight = 0.0; // Ignore negative values
-    return weight;
+  if (scale.is_ready()) { // Jika sensor berat siap
+    float weight = scale.get_units(10); // Ambil rata-rata dari 10 pembacaan
+    if (weight < 0) weight = 0.0; // Abaikan nilai negatif
+    return weight; // Kembalikan nilai berat
   }
-  return 0.0;
+  return 0.0; // Kembalikan 0 jika sensor tidak siap
 }
 
+// Fungsi untuk membaca level air menggunakan sensor ultrasonik
 float readWaterLevel() {
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+  digitalWrite(TRIG_PIN, LOW); // Matikan pin trigger
+  delayMicroseconds(2); // Tunggu 2 mikrosdetik
+  digitalWrite(TRIG_PIN, HIGH); // Aktifkan pin trigger
+  delayMicroseconds(10); // Tahan selama 10 mikrosdetik
+  digitalWrite(TRIG_PIN, LOW); // Matikan kembali pin trigger
   
-  long duration = pulseIn(ECHO_PIN, HIGH);
-  float distance = duration * 0.034 / 2; // Distance in cm
-  float level = ((TANK_HEIGHT - distance) / TANK_HEIGHT) * 100.0; // Percentage
-  return constrain(level, 0.0, 100.0);
+  long duration = pulseIn(ECHO_PIN, HIGH); // Baca durasi pulsa dari pin echo
+  float distance = duration * 0.034 / 2; // Hitung jarak dalam cm
+  float level = ((TANK_HEIGHT - distance) / TANK_HEIGHT) * 100.0; // Hitung persentase level air
+  return constrain(level, 0.0, 100.0); // Batasi nilai antara 0 dan 100
 }
 
+// Fungsi untuk memetakan nilai float dari satu rentang ke rentang lain
 float mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
+// Fungsi untuk mengirim data sensor ke server MQTT
 void publishSensorData() {
-  if (!client.connected()) {
-    reconnect();
+  if (!client.connected()) { // Jika tidak terhubung ke MQTT
+    reconnect(); // Hubungkan ulang
   }
-  client.loop();
+  client.loop(); // Proses komunikasi MQTT
   
-  // Read sensor values
-  float suhu = readTemperature();
-  float doValue = readDO();
-  float phValue = readPH();
-  float berat_pakan = readWeight();
-  float level_air = readWaterLevel();
+  // Membaca nilai dari semua sensor
+  float suhu = readTemperature(); // Baca suhu
+  float doValue = readDO(); // Baca kadar oksigen terlarut
+  float phValue = readPH(); // Baca pH
+  float berat_pakan = readWeight(); // Baca berat pakan
+  float level_air = readWaterLevel(); // Baca level air
   
-  // Create JSON object
-  StaticJsonDocument<200> doc;
-  doc["kolam"] = pond_id;
-  doc["suhu"] = suhu;
-  doc["do"] = doValue;
-  doc["ph"] = phValue;
-  doc["berat_pakan"] = berat_pakan;
-  doc["level_air"] = level_air;
+  // Membuat objek JSON untuk menyimpan data
+  StaticJsonDocument<200> doc; // Objek JSON dengan kapasitas 200 byte
+  doc["kolam"] = pond_id; // Tambahkan ID kolam
+  doc["suhu"] = suhu; // Tambahkan data suhu
+  doc["do"] = doValue; // Tambahkan data DO
+  doc["ph"] = phValue; // Tambahkan data pH
+  doc["berat_pakan"] = berat_pakan; // Tambahkan data berat pakan
+  doc["level_air"] = level_air; // Tambahkan data level air
   
-  // Serialize JSON to string
-  char buffer[256];
-  serializeJson(doc, buffer);
+  // Mengonversi JSON ke string
+  char buffer[256]; // Buffer untuk menyimpan string JSON
+  serializeJson(doc, buffer); // Serialisasi JSON ke buffer
   
-  // Publish to MQTT
-  if (client.publish(mqtt_topic, buffer)) {
-    Serial.println("Data published: ");
-    Serial.println(buffer);
-  } else {
-    Serial.println("Failed to publish data");
+  // Mengirim data ke topik MQTT
+  if (client.publish(mqtt_topic, buffer)) { // Jika pengiriman berhasil
+    Serial.println("Data berhasil dikirim: ");
+    Serial.println(buffer); // Cetak data yang dikirim
+  } else { // Jika gagal
+    Serial.println("Gagal mengirim data");
   }
 }
 
+// Fungsi loop: dijalankan berulang-ulang setelah setup
 void loop() {
-  publishSensorData();
-  delay(10000); // Publish every 10 seconds
+  publishSensorData(); // Kirim data sensor
+  delay(10000); // Tunggu 10 detik sebelum pengiriman berikutnya
 }
