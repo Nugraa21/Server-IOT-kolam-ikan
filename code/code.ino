@@ -13,7 +13,7 @@ const char* password = ""; // Ganti dengan kata sandi WiFi Anda
 // Pengaturan MQTT
 const char* mqtt_server = "broker.emqx.io"; // Alamat server MQTT
 const int mqtt_port = 1883; // Port default untuk MQTT
-const char* mqtt_client_id = "225510017"; // ID unik untuk klien MQTT
+const char* mqtt_client_id = "225510000"; // ID unik untuk klien MQTT
 const char* mqtt_topic = "nugra/data/kolam"; // Topik MQTT untuk mengirim data
 
 // Definisi pin untuk sensor
