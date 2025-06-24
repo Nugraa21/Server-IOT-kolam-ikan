@@ -1,51 +1,61 @@
-require('dotenv').config();
 const mqtt = require('mqtt');
 const admin = require('firebase-admin');
 
-// Inisialisasi Firebase Admin SDK
-const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+// ===== Firebase Service Account Langsung di sini =====
+const serviceAccount = {
+  type: "service_account",
+  project_id: "iotkolam-c5bf2",
+  private_key_id: "your_private_key_id",
+  private_key: `-----BEGIN PRIVATE KEY-----MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBK......-----END PRIVATE KEY-----\n`,
+  client_email: "firebase-adminsdk-xxxxx@iotkolam-c5bf2.iam.gserviceaccount.com",
+  client_id: "your_client_id",
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-xxxxx%40iotkolam-c5bf2.iam.gserviceaccount.com"
+};
+
+
+// ===== Inisialisasi Firebase =====
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   projectId: 'iotkolam-c5bf2',
 });
 const db = admin.firestore();
 
-// Konfigurasi MQTT
+// ===== Konfigurasi MQTT langsung di sini =====
 const mqttOptions = {
-  host: process.env.MQTT_BROKER,
-  port: parseInt(process.env.MQTT_PORT),
-  clientId: process.env.MQTT_CLIENT_ID,
+  host: 'broker.emqx.io',
+  port: 1883,
+  clientId: 'nodejs-server-225510017',
 };
 
-// Koneksi ke broker MQTT
+const MQTT_TOPIC = 'nugra/data/kolam';
+
+// ===== Koneksi MQTT =====
 const client = mqtt.connect(mqttOptions);
 
-// Saat terhubung
 client.on('connect', () => {
   console.log('Terhubung ke broker MQTT');
-  client.subscribe(process.env.MQTT_TOPIC, (err) => {
+  client.subscribe(MQTT_TOPIC, (err) => {
     if (err) {
       console.error('Gagal berlangganan ke topik:', err.message);
     } else {
-      console.log(`Berlangganan ke topik: ${process.env.MQTT_TOPIC}`);
+      console.log(`Berlangganan ke topik: ${MQTT_TOPIC}`);
     }
   });
 });
 
-// Saat menerima pesan
 client.on('message', (topic, message) => {
   try {
-    // Parse JSON
     const data = JSON.parse(message.toString());
     console.log('Data diterima:', data);
 
-    // Cek kolam
     if (!data.kolam) {
       console.error('Data ga valid: kolam ga ada');
       return;
     }
 
-    // Siapin data buat Firestore
     const pondId = `pond_${data.kolam}`;
     const sensorData = {
       suhu: parseFloat(data.suhu) || 0.0,
@@ -56,7 +66,6 @@ client.on('message', (topic, message) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Simpen ke Firestore
     db.collection('ponds')
       .doc(pondId)
       .collection('sensor_data')
@@ -72,12 +81,10 @@ client.on('message', (topic, message) => {
   }
 });
 
-// Error MQTT
 client.on('error', (err) => {
   console.error('Error MQTT:', err.message);
 });
 
-// Koneksi putus
 client.on('close', () => {
   console.log('Putus dari broker MQTT');
 });
